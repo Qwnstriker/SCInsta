@@ -26,7 +26,8 @@ BOOL isSurfaceShown(IGMainAppSurfaceIntent *surface) {
     return isShown;
 }
 
-NSArray *filterSurfacesArray(NSArray *surfaces) {
+// Sekmeleri özel sıraya koyan fonksiyon
+NSArray *reorderSurfacesCustom(NSArray *surfaces) {
     NSMutableArray *filteredSurfaces = [NSMutableArray array];
 
     for (IGMainAppSurfaceIntent *surface in surfaces) {
@@ -37,30 +38,65 @@ NSArray *filterSurfacesArray(NSArray *surfaces) {
         }
     }
 
-    return filteredSurfaces;
+    // Özel Sıralama Mantığı: Home -> Direct (DM) -> Search (Keşfet) -> Clips (Reels) -> Profile
+    NSMutableArray *customOrdered = [NSMutableArray array];
+    id homeSurface = nil;
+    id directSurface = nil;
+    id searchSurface = nil;
+    id reelsSurface = nil;
+    id profileSurface = nil;
+    NSMutableArray *otherSurfaces = [NSMutableArray array];
+
+    for (id surface in filteredSurfaces) {
+        NSString *tabString = @"";
+        if ([surface respondsToSelector:@selector(tabStringFromSurfaceIntent)]) {
+            tabString = [surface tabStringFromSurfaceIntent];
+        }
+
+        if ([tabString isEqualToString:@"FEED"]) {
+            homeSurface = surface;
+        } else if ([tabString isEqualToString:@"DIRECT"] || [tabString isEqualToString:@"DIRECT_THREAD_LIST"]) {
+            directSurface = surface;
+        } else if ([tabString isEqualToString:@"SEARCH"]) {
+            searchSurface = surface;
+        } else if ([tabString isEqualToString:@"CLIPS"]) {
+            reelsSurface = surface;
+        } else if ([tabString isEqualToString:@"PROFILE"]) {
+            profileSurface = surface;
+        } else {
+            [otherSurfaces addObject:surface];
+        }
+    }
+
+    // İstediğin tam sıralamayı diziyoruz
+    if (homeSurface) [customOrdered addObject:homeSurface];
+    if (directSurface) [customOrdered addObject:directSurface]; // DM 2. sırada!
+    if (searchSurface) [customOrdered addObject:searchSurface];
+    if (reelsSurface) [customOrdered addObject:reelsSurface];
+    if (profileSurface) [customOrdered addObject:profileSurface];
+    
+    // Eğer dışarıda kalan başka bir sekme varsa sonuna ekle
+    [customOrdered addObjectsFromArray:otherSurfaces];
+
+    return customOrdered.count > 0 ? customOrdered : filteredSurfaces;
 }
 
 ///////////////////////////////////////////////
 
 %hook IGTabBarControllerSwipeCoordinator
 - (id)initWithSurfaces:(id)surfaces parentViewController:(id)controller enableHaptics:(_Bool)haptics launcherSet:(id)set {
-    // Removes the surface from the main swipeable app collection view
-    return %orig(filterSurfacesArray(surfaces), controller, haptics, set);
+    return %orig(reorderSurfacesCustom(surfaces), controller, haptics, set);
 }
 %end
 
 %hook IGTabBarController
 - (void)_layoutTabBar {
-    // Prevents the wrong icon from being shown as selected because of mismatched surface array indexes
     NSArray *_tabBarSurfaces = [SCIUtils getIvarForObj:self name:"_tabBarSurfaces"];
-
-    [SCIUtils setIvarForObj:self name:"_tabBarSurfaces" value:filterSurfacesArray(_tabBarSurfaces)];
-    
+    [SCIUtils setIvarForObj:self name:"_tabBarSurfaces" value:reorderSurfacesCustom(_tabBarSurfaces)];
     %orig;
 }
 
 - (id)_buttonForTabBarSurface:(id)surface {
-    // Prevents the button from being added to the tab bar 
     id button = %orig(surface);
 
     if (!isSurfaceShown(surface)) {
@@ -74,25 +110,16 @@ NSArray *filterSurfacesArray(NSArray *surfaces) {
 // Demangled name: IGNavConfiguration.IGNavConfiguration
 %hook _TtC18IGNavConfiguration18IGNavConfiguration
 - (NSInteger)tabOrdering {
-
-    if ([[SCIUtils getStringPref:@"nav_icon_ordering"] isEqualToString:@"classic"]) return 0;
-    else if ([[SCIUtils getStringPref:@"nav_icon_ordering"] isEqualToString:@"standard"]) return 1;
-    else if ([[SCIUtils getStringPref:@"nav_icon_ordering"] isEqualToString:@"alternate"]) return 2;
-
     return %orig;
-
 }
 - (void)setTabOrdering:(NSInteger)arg1 {
     return;
 }
 
 - (BOOL)isTabSwipingEnabled {
-
     if ([[SCIUtils getStringPref:@"swipe_nav_tabs"] isEqualToString:@"enabled"]) return YES;
     else if ([[SCIUtils getStringPref:@"swipe_nav_tabs"] isEqualToString:@"disabled"]) return NO;
-
     return %orig;
-
 }
 - (void)setIsTabSwipingEnabled:(BOOL)arg1 {
     return;
