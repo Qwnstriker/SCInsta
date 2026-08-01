@@ -109,19 +109,17 @@ jobs:
             - name: Build SCInsta tweak for sideloading (as IPA)
               run: |
                 pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
-                
+                echo "$HOME/.local/bin" >> $GITHUB_PATH
+                                
                 cd main
                 curl -Lo ipapatch https://github.com/asdfzxcvbn/ipapatch/releases/download/v2.1.3/ipapatch.macos-arm64
                 chmod +x ipapatch
-                export PATH=.:$PATH
+                export PATH=.:$PATH:$HOME/.local/bin
                 ls -la
-
-                ./build.sh sideload
+                ./build.sh sideload -u
                 ls -la packages
-                
               env:
                 THEOS: ${{ github.workspace }}/theos
-
             - name: Rename IPA to include version info
               run: |
                 cd main/packages
